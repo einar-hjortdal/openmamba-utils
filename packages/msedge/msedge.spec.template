@@ -1,7 +1,6 @@
 Name:           microsoft-edge-%{release_type}
 Version:        %{edge_version}
 Release:        %{edge_release}%{?dist}
-Architecture:   x86_64
 Summary:        Microsoft Edge
 License:        Multiple, see https://www.microsoftedgeinsider.com/en-us/
 URL:            https://www.microsoftedgeinsider.com/en-us/
@@ -82,5 +81,5 @@ fi
 # No files.
 
 %changelog
-* Sat Nov 22 2026 Packager <einar.hjortdal@outlook.com>
+* Sun Nov 22 2026 Packager <einar.hjortdal@outlook.com>
 - Install Microsoft Edge from the upstream RPM in %post

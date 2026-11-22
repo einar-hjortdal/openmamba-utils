@@ -10,7 +10,6 @@ const repo_url = 'https://packages.microsoft.com/yumrepos/edge-stable'
 const repomd_url = repo_url + '/repodata/repomd.xml'
 const package_name_prefix = 'microsoft-edge-'
 const release_type_stable = package_name_prefix + 'stable'
-const spec_path = './msedge.spec'
 const spec_template_path = './msedge.spec.template'
 const spec_var_prefix = 'edge_'
 const spec_var_repo_url = spec_var_prefix + 'repo_url'
@@ -216,6 +215,16 @@ fn format_spec_variable(name string, value string) string {
 	return '%global ${name} ${value}'
 }
 
+fn get_spec_path(release_type string) !string {
+	match release_type {
+		release_type_stable {} // good
+		else {
+			return error('invalid release type')
+		}
+	}
+	return './${release_type}.spec'
+}
+
 fn update_spec(package Package) ! {
 	spec_template_file := os.read_file(spec_template_path)!
 	mut new_spec_file := []string{len: 0, cap: 8}
@@ -227,7 +236,8 @@ fn update_spec(package Package) ! {
 	new_spec_file << format_spec_variable(spec_var_release, package.version.release)
 	new_spec_file << format_spec_variable(spec_var_release_type, release_type_stable)
 	new_spec_file << spec_template_file
-	os.write_file(spec_path, new_spec_file.join('\n'))!
+	new_spec_file_path := get_spec_path(release_type_stable)!
+	os.write_file(new_spec_file_path, new_spec_file.join('\n'))!
 }
 
 fn find_latest_package(primary_metadata string) !Package {
