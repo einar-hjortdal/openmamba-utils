@@ -1,0 +1,86 @@
+Name:           microsoft-edge-%{release_type}
+Version:        %{edge_version}
+Release:        %{edge_release}%{?dist}
+Architecture:   x86_64
+Summary:        Microsoft Edge
+License:        Multiple, see https://www.microsoftedgeinsider.com/en-us/
+URL:            https://www.microsoftedgeinsider.com/en-us/
+Requires:       curl
+Requires:       rpm
+Requires:       cpio
+Requires:       coreutils
+Requires:       findutils
+
+%description
+The web browser from Microsoft
+
+Microsoft Edge is a browser that combines a minimal design with sophisticated technology to make the web faster, safer, and easier.
+
+%install
+# Empty payload: nothing is installed by rpm itself.
+
+%post -p /bin/bash
+set -euo pipefail
+
+RPM_URL="%{edge_repo_url}/%{edge_location}"
+RPM_CHECKSUM="%{edge_checksum}"
+STATE_DIR=/var/lib/msedge-installer
+MANIFEST="$STATE_DIR/installed-files.txt"
+
+# Remove files from a previous install (upgrade path), deepest first.
+if [ -f "$MANIFEST" ]; then
+    sort -r "$MANIFEST" | while IFS= read -r p; do
+        rm -f -- "$p"
+    done
+    rm -f "$MANIFEST"
+fi
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+curl -fL --retry 3 -o "$WORK/edge.rpm" "$RPM_URL"
+
+# TODO here we assume the checksum is sha256, we aren't checking %checksum_type
+echo "$RPM_CHECKSUM  $WORK/edge.rpm" | sha256sum -c -
+
+mkdir "$WORK/root"
+rpm2cpio "$WORK/edge.rpm" | (cd "$WORK/root" && cpio -idm --quiet)
+
+# Copy only /opt and /usr.
+cd "$WORK/root"
+find opt usr \( -type f -o -type l \) -print > "$WORK/list"
+
+mkdir -p "$STATE_DIR"
+: > "$MANIFEST.new"
+while IFS= read -r f; do
+    cp -a --parents -- "$f" /
+    echo "/$f" >> "$MANIFEST.new"
+done < "$WORK/list"
+mv "$MANIFEST.new" "$MANIFEST"
+
+# Chromium's sandbox helper must be setuid root.
+if [ -f /opt/microsoft/msedge/chrome-sandbox ]; then
+    chmod 4755 /opt/microsoft/msedge/chrome-sandbox
+fi
+
+update-desktop-database -q /usr/share/applications 2>/dev/null || true
+gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+
+%postun -p /bin/bash
+# $1 is 0 only on final erase. On upgrade the new %post has already replaced the files.
+if [ "$1" -eq 0 ] && [ -f /var/lib/msedge-installer/installed-files.txt ]; then
+    sort -r /var/lib/msedge-installer/installed-files.txt | while IFS= read -r p; do
+        rm -f -- "$p"
+    done
+    rm -f /var/lib/msedge-installer/installed-files.txt
+    rmdir /var/lib/msedge-installer 2>/dev/null || true
+    find /opt/microsoft/msedge -depth -type d -empty -exec rmdir {} + 2>/dev/null || true
+    rmdir /opt/microsoft 2>/dev/null || true
+fi
+
+%files
+# No files.
+
+%changelog
+* Sat Nov 22 2026 Packager <einar.hjortdal@outlook.com>
+- Install Microsoft Edge from the upstream RPM in %post

@@ -3,13 +3,23 @@ module main
 import compress.gzip
 import encoding.xml
 import net.http
+import os
 import strconv
 
 const repo_url = 'https://packages.microsoft.com/yumrepos/edge-stable'
 const repomd_url = repo_url + '/repodata/repomd.xml'
 const package_name_prefix = 'microsoft-edge-'
-const stable_package_name = package_name_prefix + 'stable'
+const release_type_stable = package_name_prefix + 'stable'
 const spec_path = './msedge.spec'
+const spec_template_path = './msedge.spec.template'
+const spec_var_prefix = 'edge_'
+const spec_var_repo_url = spec_var_prefix + 'repo_url'
+const spec_var_version = spec_var_prefix + 'version'
+const spec_var_release = spec_var_prefix + 'release'
+const spec_var_location = spec_var_prefix + 'location'
+const spec_var_checksum_type = spec_var_prefix + 'checksum_type'
+const spec_var_checksum = spec_var_prefix + 'checksum'
+const spec_var_release_type = 'release_type'
 
 fn get_primary_metadata_url() !string {
 	repomd := http.get(repomd_url)!
@@ -202,13 +212,22 @@ fn parse_package_location(node xml.XMLNode) !PackageLocation {
 	}
 }
 
-fn parse_package(node xml.XMLNode) !Package {
-	return Package{
-		name:     parse_package_name(node)!
-		version:  parse_package_version(node)!
-		checksum: parse_package_checksum(node)!
-		location: parse_package_location(node)!
-	}
+fn format_spec_variable(name string, value string) string {
+	return '%global ${name} ${value}'
+}
+
+fn update_spec(package Package) ! {
+	spec_template_file := os.read_file(spec_template_path)!
+	mut new_spec_file := []string{len: 0, cap: 8}
+	new_spec_file << format_spec_variable(spec_var_repo_url, repo_url)
+	new_spec_file << format_spec_variable(spec_var_checksum_type, package.checksum.checksum_type)
+	new_spec_file << format_spec_variable(spec_var_checksum, package.checksum.checksum)
+	new_spec_file << format_spec_variable(spec_var_location, package.location.href)
+	new_spec_file << format_spec_variable(spec_var_version, package.version.version)
+	new_spec_file << format_spec_variable(spec_var_release, package.version.release)
+	new_spec_file << format_spec_variable(spec_var_release_type, release_type_stable)
+	new_spec_file << spec_template_file
+	os.write_file(spec_path, new_spec_file.join('\n'))!
 }
 
 fn find_latest_package(primary_metadata string) !Package {
@@ -220,8 +239,14 @@ fn find_latest_package(primary_metadata string) !Package {
 
 	mut latest := ?Package(none)
 	for package in packages {
-		parsed := parse_package(package)!
-		if parsed.name != stable_package_name {
+		parsed := Package{
+			name:     parse_package_name(package)!
+			version:  parse_package_version(package)!
+			checksum: parse_package_checksum(package)!
+			location: parse_package_location(package)!
+		}
+
+		if parsed.name != release_type_stable {
 			continue
 		}
 
@@ -246,7 +271,7 @@ fn run() ! {
 	primary_metadata_url := get_primary_metadata_url()!
 	primary_metadata := get_primary_metadata(primary_metadata_url)!
 	latest_package := find_latest_package(primary_metadata)!
-	// TODO write package data in msedge.spec
+	update_spec(latest_package)!
 }
 
 fn main() {
