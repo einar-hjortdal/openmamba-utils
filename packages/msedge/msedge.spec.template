@@ -228,14 +228,8 @@ remove_nss_symlinks() {
   done
 }
 
-remove_udev_symlinks() {
-  rm -rf "/opt/microsoft/msedge/libudev.so.0"
-}
-
 remove_nss_symlinks
 add_nss_symlinks
-
-remove_udev_symlinks
 
 # ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 %preun -p /bin/bash
@@ -286,10 +280,6 @@ remove_nss_symlinks() {
   done
 }
 
-remove_udev_symlinks() {
-  rm -rf "/opt/microsoft/msedge/libudev.so.0"
-}
-
 # Only remove menu items and symlinks on uninstall. When upgrading,
 # old_pkg's %preun runs after new_pkg's %post.
 if [ "$mode" = "uninstall" ]; then
@@ -318,7 +308,6 @@ if [ "$1" = "remove" ] || [ "$1" = "0" ]; then
   fi
 fi
   remove_nss_symlinks
-  remove_udev_symlinks
 
   /usr/sbin/update-alternatives --remove microsoft-edge \
     /usr/bin/microsoft-edge-stable
