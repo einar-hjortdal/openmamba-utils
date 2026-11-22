@@ -16,12 +16,15 @@ The web browser from Microsoft
 
 Microsoft Edge is a browser that combines a minimal design with sophisticated technology to make the web faster, safer, and easier.
 
+# ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 %install
 # Empty payload: nothing is installed by rpm itself.
 
+# ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 %post -p /bin/bash
 set -euo pipefail
 
+# ▓ Get the rpm from upstream, extract and install the parts we need ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 RPM_URL="%{edge_repo_url}/%{edge_location}"
 RPM_CHECKSUM="%{edge_checksum}"
 STATE_DIR=/var/lib/msedge-installer
@@ -58,14 +61,270 @@ while IFS= read -r f; do
 done < "$WORK/list"
 mv "$MANIFEST.new" "$MANIFEST"
 
-# Chromium's sandbox helper must be setuid root.
-if [ -f /opt/microsoft/msedge/chrome-sandbox ]; then
-    chmod 4755 /opt/microsoft/msedge/chrome-sandbox
+# ▓ Actual setup (obtained with `rpm -qp --scripts`) ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+
+# System-wide package configuration.
+DEFAULTS_FILE="/etc/default/microsoft-edge"
+
+# Add icons to the system icons
+XDG_ICON_RESOURCE="`command -v xdg-icon-resource 2> /dev/null || true`"
+if [ ! -x "$XDG_ICON_RESOURCE" ]; then
+  echo "Error: Could not find xdg-icon-resource" >&2
+  exit 1
+fi
+for icon in  product_logo_16.png product_logo_24.png product_logo_32.png product_logo_48.png product_logo_64.png product_logo_128.png product_logo_256.png; do
+  size="$(echo ${icon} | sed 's/[^0-9]//g')"
+  "$XDG_ICON_RESOURCE" install --size "${size}" "/opt/microsoft/msedge/${icon}" \
+    "microsoft-edge"
+done
+
+# Update cache of .desktop file MIME types. Non-fatal since it's just a cache.
+update-desktop-database > /dev/null 2>&1 || true
+
+# Updates defaults.list file if present.
+update_defaults_list() {
+  # $1: name of the .desktop file
+
+  local DEFAULTS_LIST="/usr/share/applications/defaults.list"
+
+  if [ ! -f "${DEFAULTS_LIST}" ]; then
+    return
+  fi
+
+  # Split key-value pair out of MimeType= line from the .desktop file,
+  # then split semicolon-separated list of mime types (they should not contain
+  # spaces).
+  mime_types="$(grep MimeType= /usr/share/applications/${1} |
+                cut -d '=' -f 2- |
+                tr ';' ' ')"
+  for mime_type in ${mime_types}; do
+    if egrep -q "^${mime_type}=" "${DEFAULTS_LIST}"; then
+      if ! egrep -q "^${mime_type}=.*${1}" "${DEFAULTS_LIST}"; then
+        default_apps="$(grep ${mime_type}= "${DEFAULTS_LIST}" |
+                        cut -d '=' -f 2-)"
+        egrep -v "^${mime_type}=" "${DEFAULTS_LIST}" > "${DEFAULTS_LIST}.new"
+        echo "${mime_type}=${default_apps};${1}" >> "${DEFAULTS_LIST}.new"
+        mv "${DEFAULTS_LIST}.new" "${DEFAULTS_LIST}"
+      fi
+    else
+      # If there's no mention of the mime type in the file, add it.
+      echo "${mime_type}=${1};" >> "${DEFAULTS_LIST}"
+    fi
+  done
+}
+
+update_defaults_list "microsoft-edge.desktop"
+
+# This function uses sed to insert the contents of one file into another file,
+# after the first line matching a given regular expression. If there is no
+# matching line, then the file is unchanged.
+insert_after_first_match() {
+  # $1: file to update
+  # $2: regular expression
+  # $3: file to insert
+  sed -i -e "1,/$2/ {
+    /$2/ r $3
+    }" "$1"
+}
+
+# If /usr/share/gnome-control-center/default-apps/gnome-default-applications.xml
+# exists, it may need to be updated to add ourselves to the default applications
+# list. If we find the file and it does not seem to contain our patch already
+# (the patch is safe to leave even after uninstall), update it.
+GNOME_DFL_APPS=/usr/share/gnome-control-center/default-apps/gnome-default-applications.xml
+if [ -f "$GNOME_DFL_APPS" ]; then
+# Conditionally insert the contents of the file "default-app-block" after the
+# first "<web-browsers>" line we find in gnome-default-applications.xml
+  fgrep -q "Microsoft Edge" "$GNOME_DFL_APPS" || insert_after_first_match \
+    "$GNOME_DFL_APPS" \
+    "^[ 	]*<web-browsers>[ 	]*$" \
+    "/opt/microsoft/msedge/default-app-block"
 fi
 
-update-desktop-database -q /usr/share/applications 2>/dev/null || true
-gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+# This function performs the setup for the chrome management service process.
+# It creates a new msedgemgmt group, creates the signing key file, and updates
+# permissions for both the signing key file and the binary.
+chrome_management_service_setup() {
+  if [ ! -f "$DEFAULTS_FILE" ]; then
+    return
+  fi
 
+  if ! grep -q "install_device_trust_key_management_command=true" \
+    "$DEFAULTS_FILE"; then
+    return
+  fi
+
+  getent group msedgemgmt > /dev/null || groupadd msedgemgmt
+
+  chgrp msedgemgmt "/opt/microsoft/msedge/msedge-management-service"
+  chmod 2755 "/opt/microsoft/msedge/msedge-management-service"
+
+  mkdir -p "/etc/opt/microsoft/policies/enrollment"
+  SIGNING_KEY_FILE="/etc/opt/microsoft/policies/enrollment/DeviceTrustSigningKey"
+  if [ ! -e "$SIGNING_KEY_FILE" ]; then
+    touch "$SIGNING_KEY_FILE"
+  fi
+
+  chgrp msedgemgmt "$SIGNING_KEY_FILE"
+  chmod 664 "$SIGNING_KEY_FILE"
+}
+
+chrome_management_service_setup
+
+# Reload AppArmor profile
+if [ -f "/opt/microsoft/msedge/apparmor.d/microsoft-edge-stable" ]; then
+  if [ -f "/etc/apparmor.d/abi/4.0" ] && [ -x /sbin/apparmor_parser ]; then
+    # Check for exact attachment collision with Ubuntu's native chrome profile.
+    if [ "microsoft-edge-stable" = "google-chrome-stable" ] && \
+       [ -f "/etc/apparmor.d/chrome" ]; then
+      # Skip installation if a conflicting profile exists.
+      true
+    else
+      cp "/opt/microsoft/msedge/apparmor.d/microsoft-edge-stable" \
+        "/etc/apparmor.d/microsoft-edge-stable"
+      /sbin/apparmor_parser -r "/etc/apparmor.d/microsoft-edge-stable" || true
+    fi
+  fi
+fi
+
+DEFAULT_ARCH="x86_64"
+
+get_lib_dir() {
+  if [ "$DEFAULT_ARCH" = "i386" ] || [ "$DEFAULT_ARCH" = "armhf" ] || \
+      [ "$DEFAULT_ARCH" = "mipsel" ]; then
+    LIBDIR=lib
+  elif [ "$DEFAULT_ARCH" = "x86_64" ] || [ "$DEFAULT_ARCH" = "aarch64" ] || \
+        [ "$DEFAULT_ARCH" = "mips64el" ]; then
+    LIBDIR=lib64
+  else
+    echo Unknown CPU Architecture: "$DEFAULT_ARCH"
+    exit 1
+  fi
+}
+
+NSS_FILES="libnspr4.so.0d libplds4.so.0d libplc4.so.0d libssl3.so.1d \
+    libnss3.so.1d libsmime3.so.1d libnssutil3.so.1d"
+
+add_nss_symlinks() {
+  get_lib_dir
+  for f in $NSS_FILES
+  do
+    target=$(echo $f | sed 's/\.[01]d$//')
+    if [ -f "/$LIBDIR/$target" ]; then
+      ln -snf "/$LIBDIR/$target" "/opt/microsoft/msedge/$f"
+    elif [ -f "/usr/$LIBDIR/$target" ]; then
+      ln -snf "/usr/$LIBDIR/$target" "/opt/microsoft/msedge/$f"
+    else
+      echo $f not found in "/$LIBDIR/$target" or "/usr/$LIBDIR/$target".
+      exit 1
+    fi
+  done
+}
+
+remove_nss_symlinks() {
+  for f in $NSS_FILES
+  do
+    rm -rf "/opt/microsoft/msedge/$f"
+  done
+}
+
+remove_udev_symlinks() {
+  rm -rf "/opt/microsoft/msedge/libudev.so.0"
+}
+
+remove_nss_symlinks
+add_nss_symlinks
+
+remove_udev_symlinks
+
+# ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+%preun -p /bin/bash
+if [ "$1" -eq "0" ]; then
+  mode="uninstall"
+elif [ "$1" -eq "1" ]; then
+  mode="upgrade"
+fi
+
+DEFAULT_ARCH="x86_64"
+
+get_lib_dir() {
+  if [ "$DEFAULT_ARCH" = "i386" ] || [ "$DEFAULT_ARCH" = "armhf" ] || \
+      [ "$DEFAULT_ARCH" = "mipsel" ]; then
+    LIBDIR=lib
+  elif [ "$DEFAULT_ARCH" = "x86_64" ] || [ "$DEFAULT_ARCH" = "aarch64" ] || \
+        [ "$DEFAULT_ARCH" = "mips64el" ]; then
+    LIBDIR=lib64
+  else
+    echo Unknown CPU Architecture: "$DEFAULT_ARCH"
+    exit 1
+  fi
+}
+
+NSS_FILES="libnspr4.so.0d libplds4.so.0d libplc4.so.0d libssl3.so.1d \
+    libnss3.so.1d libsmime3.so.1d libnssutil3.so.1d"
+
+add_nss_symlinks() {
+  get_lib_dir
+  for f in $NSS_FILES
+  do
+    target=$(echo $f | sed 's/\.[01]d$//')
+    if [ -f "/$LIBDIR/$target" ]; then
+      ln -snf "/$LIBDIR/$target" "/opt/microsoft/msedge/$f"
+    elif [ -f "/usr/$LIBDIR/$target" ]; then
+      ln -snf "/usr/$LIBDIR/$target" "/opt/microsoft/msedge/$f"
+    else
+      echo $f not found in "/$LIBDIR/$target" or "/usr/$LIBDIR/$target".
+      exit 1
+    fi
+  done
+}
+
+remove_nss_symlinks() {
+  for f in $NSS_FILES
+  do
+    rm -rf "/opt/microsoft/msedge/$f"
+  done
+}
+
+remove_udev_symlinks() {
+  rm -rf "/opt/microsoft/msedge/libudev.so.0"
+}
+
+# Only remove menu items and symlinks on uninstall. When upgrading,
+# old_pkg's %preun runs after new_pkg's %post.
+if [ "$mode" = "uninstall" ]; then
+# Remove icons from the system icons
+XDG_ICON_RESOURCE="`command -v xdg-icon-resource 2> /dev/null || true`"
+if [ ! -x "$XDG_ICON_RESOURCE" ]; then
+  echo "Error: Could not find xdg-icon-resource" >&2
+  exit 1
+fi
+for icon in  product_logo_16.png product_logo_24.png product_logo_32.png product_logo_48.png product_logo_64.png product_logo_128.png product_logo_256.png; do
+  size="$(echo ${icon} | sed 's/[^0-9]//g')"
+  "$XDG_ICON_RESOURCE" uninstall --size "${size}" "microsoft-edge"
+done
+
+# Update cache of .desktop file MIME types. Non-fatal since it's just a cache.
+update-desktop-database > /dev/null 2>&1 || true
+
+# Unload AppArmor profile
+# "remove" is for Debian/Ubuntu, "0" is for RPM distributions.
+if [ "$1" = "remove" ] || [ "$1" = "0" ]; then
+  if [ -f "/etc/apparmor.d/microsoft-edge-stable" ]; then
+    if [ -x /sbin/apparmor_parser ]; then
+      /sbin/apparmor_parser -R "/etc/apparmor.d/microsoft-edge-stable" || true
+    fi
+    rm -f "/etc/apparmor.d/microsoft-edge-stable"
+  fi
+fi
+  remove_nss_symlinks
+  remove_udev_symlinks
+
+  /usr/sbin/update-alternatives --remove microsoft-edge \
+    /usr/bin/microsoft-edge-stable
+fi
+
+# ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 %postun -p /bin/bash
 # $1 is 0 only on final erase. On upgrade the new %post has already replaced the files.
 if [ "$1" -eq 0 ] && [ -f /var/lib/msedge-installer/installed-files.txt ]; then
