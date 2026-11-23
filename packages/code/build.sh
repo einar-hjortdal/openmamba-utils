@@ -1,5 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-v . -o main
+if [[ ! -f "./main" ]]; then
+	v . -o main
+fi
+
 ./main

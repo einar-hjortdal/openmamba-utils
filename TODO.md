@@ -2,7 +2,7 @@
 
 - [ ] abstract more utils to common module
 - [ ] unify build scripts
-- [ ] detect when main.v is already compiled and run main
+- [ ] check arch in xml
 
 ## Ask openmamba to package:
 
