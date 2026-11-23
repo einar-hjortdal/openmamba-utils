@@ -274,3 +274,7 @@ pub fn get_latest_package(package_name string, repo_url string) !Package {
 	primary_metadata := get_primary_metadata(primary_metadata_url)!
 	return find_latest_package(package_name, primary_metadata)
 }
+
+pub fn format_spec_variable(name string, value string) string {
+	return '%global ${name} ${value}'
+}

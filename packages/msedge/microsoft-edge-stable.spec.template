@@ -1,4 +1,4 @@
-Name:           %{release_type}
+Name:           %{edge_package_name}
 Version:        %{edge_version}
 Release:        %{edge_release}.1mamba
 ExclusiveArch:  x86_64

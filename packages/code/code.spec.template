@@ -1,4 +1,4 @@
-Name:           %{code_release_type}
+Name:           %{code_package_name}
 Version:        %{code_version}
 Release:        %{code_release}.1mamba
 ExclusiveArch:  x86_64
