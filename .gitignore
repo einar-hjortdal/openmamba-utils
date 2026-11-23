@@ -1,7 +1,4 @@
 notes
-packages/msedge/msedge
-packages/msedge/microsoft-edge*.spec
-packages/msedge/microsoft-edge*.spec.hash
-packages/code/code
-packages/code/code*.spec
-packages/code/code*.spec.hash
+packages/*/main
+packages/*/*.spec
+packages/*/spec.hash
