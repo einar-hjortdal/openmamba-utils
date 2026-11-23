@@ -1,15 +1,11 @@
 # TODO
 
-- [ ] abstract more utils to common module
-- [ ] unify build scripts
-- [ ] check arch in xml
-
 ## Ask openmamba to package:
 
 - [x] lxdm
-- [ ] [lxterminal](https://github.com/lxde/lxterminal)
-- [ ] [lxappearance](https://github.com/lxde/lxappearance)
-- [ ] [pcmanfm](https://github.com/lxde/pcmanfm)
+- [x] [lxterminal](https://github.com/lxde/lxterminal)
+- [x] [lxappearance](https://github.com/lxde/lxappearance)
+- [x] [pcmanfm](https://github.com/lxde/pcmanfm)
 
 ## Packages to maintain:
 

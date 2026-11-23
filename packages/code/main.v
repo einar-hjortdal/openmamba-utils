@@ -1,16 +1,12 @@
 module main
 
-import encoding.xml
 import os
-import strconv
 //
 import common
 
 const repo_url = 'https://packages.microsoft.com/yumrepos/vscode'
-const repomd_url = repo_url + '/repodata/repomd.xml'
 const package_name = 'code'
 const release_type_stable = package_name
-// const release_type_insiders = 'code-insiders'
 const spec_template_path = './code.spec.template'
 const spec_var_prefix = 'code_'
 const spec_var_repo_url = spec_var_prefix + 'repo_url'
@@ -20,181 +16,6 @@ const spec_var_location = spec_var_prefix + 'location'
 const spec_var_checksum_type = spec_var_prefix + 'checksum_type'
 const spec_var_checksum = spec_var_prefix + 'checksum'
 const spec_var_release_type = spec_var_prefix + 'release_type'
-
-struct PackageVersion {
-	version string
-	release string
-}
-
-struct PackageChecksum {
-	checksum      string
-	checksum_type string
-}
-
-struct PackageLocation {
-	href string
-}
-
-struct Package {
-	name     string
-	version  PackageVersion
-	checksum PackageChecksum
-	location PackageLocation
-}
-
-fn (a Package) parse_version_parts() ![]int {
-	parts := a.version.version.split('.')
-	mut res := []int{len: 0, cap: parts.len}
-	for part in parts {
-		res << strconv.parse_int(part, 64, 64)!
-	}
-	return res
-}
-
-fn (a Package) version_is_same_of(b Package) bool {
-	return a.version.version == b.version.version
-}
-
-fn (a Package) version_is_newer_than(b Package) !bool {
-	a_parts := a.parse_version_parts()!
-	b_parts := b.parse_version_parts()!
-	if a_parts.len != b_parts.len {
-		return error('version numbering system does not match across packages: ${a.version.version}, ${b.version.version}')
-	}
-
-	for i, a_int in a_parts {
-		b_int := b_parts[i]
-		if a_int > b_int {
-			return true
-		}
-		if a_int == b_int {
-			continue
-		}
-		return false
-	}
-	return error('unexpected package version, Package.version_is_newer_than must be called after Package.version_is_same_of')
-}
-
-// some packages (eg. code) has release strings that cannot be converted to integers such as `1683144671.el7`. To compare these releases, we compare the first segment which should be an integer.
-// TODO tokenize properly, see rpmvercmp.c
-fn (a Package) release_is_newer_than(b Package) !bool {
-	a_release_parts := a.version.release.split('.')
-	b_release_parts := b.version.release.split('.')
-
-	// we assume same length of segments
-	if a_release_parts.len != b_release_parts.len {
-		return error('unexpected release segments lengths')
-	}
-
-	for i, a_part in a_release_parts {
-		b_part := b_release_parts[i]
-		// we assume segments are same type and no leading zeros
-		if a_part > b_part {
-			return true
-		}
-
-		if b_part > a_part {
-			return false
-		}
-	}
-
-	return a_release_parts.len > b_release_parts.len
-}
-
-fn (a Package) is_newer_than(b Package) !bool {
-	if !a.version_is_same_of(b) {
-		return a.version_is_newer_than(b)!
-	}
-	return a.release_is_newer_than(b)
-}
-
-fn parse_package_name(node xml.XMLNode) !string {
-	name_elements := node.get_elements_by_tag('name')
-	if name_elements.len != 1 {
-		return error('unexpected: 0 or more than 1 name in the same node')
-	}
-
-	n := name_elements[0]
-	if n.children.len != 1 {
-		return error('unexpected: 0 or more than 1 children in `name` node')
-	}
-
-	name := n.children[0]
-	match name {
-		string {
-			return name
-		}
-		else {
-			return error('unexpected name child type')
-		}
-	}
-}
-
-fn parse_package_version(node xml.XMLNode) !PackageVersion {
-	version_elements := node.get_elements_by_tag('version')
-	if version_elements.len != 1 {
-		return error('unexpected: 0 or more than 1 version in the same node')
-	}
-
-	e := version_elements[0]
-	version := e.attributes['ver'] or {
-		return error('missing `ver` attribute from version node')
-	}
-
-	release := e.attributes['rel'] or {
-		return error('missing `rel` attribute from version node')
-	}
-
-	return PackageVersion{
-		version: version
-		release: release
-	}
-}
-
-fn parse_package_checksum(node xml.XMLNode) !PackageChecksum {
-	checksum_elements := node.get_elements_by_tag('checksum')
-	if checksum_elements.len != 1 {
-		return error('unexpected: 0 or more than 1 checksum in the same node')
-	}
-
-	e := checksum_elements[0]
-	checksum_type := e.attributes['type'] or {
-		return error('missing `type` attribute from checksum node')
-	}
-
-	if e.children.len != 1 {
-		return error('unexpected: 0 or more than 1 children in checksum node')
-	}
-
-	checksum := e.children[0]
-	match checksum {
-		string {
-			return PackageChecksum{
-				checksum_type: checksum_type
-				checksum:      checksum
-			}
-		}
-		else {
-			return error('unexpected checksum child type')
-		}
-	}
-}
-
-fn parse_package_location(node xml.XMLNode) !PackageLocation {
-	location_elements := node.get_elements_by_tag('location')
-	if location_elements.len != 1 {
-		return error('unexpected: 0 or more than 1 location in the same node')
-	}
-
-	location := location_elements[0]
-	href := location.attributes['href'] or {
-		return error('missing `href` attribute from location node')
-	}
-
-	return PackageLocation{
-		href: href
-	}
-}
 
 fn format_spec_variable(name string, value string) string {
 	return '%global ${name} ${value}'
@@ -210,7 +31,7 @@ fn get_spec_path(release_type string) !string {
 	return './${release_type}.spec'
 }
 
-fn update_spec(package Package) ! {
+fn update_spec(package common.Package) ! {
 	spec_template_file := os.read_file(spec_template_path)!
 	mut new_spec_file := []string{len: 0, cap: 8}
 	new_spec_file << format_spec_variable(spec_var_repo_url, repo_url)
@@ -225,47 +46,8 @@ fn update_spec(package Package) ! {
 	os.write_file(new_spec_file_path, new_spec_file.join('\n'))!
 }
 
-fn find_latest_package(primary_metadata string) !Package {
-	document := xml.XMLDocument.from_string(primary_metadata)!
-	packages := document.get_elements_by_tag('package')
-	if packages.len == 0 {
-		return error('No packages exist')
-	}
-
-	mut latest := ?Package(none)
-	for package in packages {
-		parsed := Package{
-			name:     parse_package_name(package)!
-			version:  parse_package_version(package)!
-			checksum: parse_package_checksum(package)!
-			location: parse_package_location(package)!
-		}
-
-		if parsed.name != release_type_stable {
-			continue
-		}
-
-		current := latest or {
-			latest = parsed
-			continue
-		}
-
-		parsed_is_newer := parsed.is_newer_than(current)!
-		if parsed_is_newer {
-			latest = parsed
-		}
-	}
-
-	found := latest or {
-		return error('no valid package found')
-	}
-	return found
-}
-
 fn run() ! {
-	primary_metadata_url := common.get_primary_metadata_url(repo_url, repomd_url)!
-	primary_metadata := common.get_primary_metadata(primary_metadata_url)!
-	latest_package := find_latest_package(primary_metadata)!
+	latest_package := common.get_latest_package(release_type_stable, repo_url)!
 	update_spec(latest_package)!
 }
 
