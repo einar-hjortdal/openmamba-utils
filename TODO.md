@@ -15,7 +15,7 @@
 - [ ] [x017/mel](https://github.com/x017/mel)
 - [ ] [diegoleteliers10/corvo](https://github.com/diegoleteliers10/corvo)
 - [ ] [diegoleteliers10/fasty](https://github.com/diegoleteliers10/fasty)
-- [ ] [grimsteel/pass-secret-service](https://github.com/grimsteel/pass-secret-service)
+- [x] [grimsteel/pass-secret-service](https://github.com/grimsteel/pass-secret-service)
 - [ ] [grimsteel/pass-nm-agent](https://github.com/grimsteel/pass-nm-agent)
 
 ### Non-redistributable binaries:
