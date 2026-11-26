@@ -1,0 +1,33 @@
+%global debug_package %{nil}
+
+Name:           mel
+Version:        0.%{commit_date}
+Release:        %{commit_count}.1mamba
+Summary:        X11 Minimal Screen Locker
+License:        NONE
+URL:            https://github.com/x017/mel
+Source0:        https://github.com/x017/mel/archive/%{commit}/%{name}-%{commit}.tar.gz
+BuildRequires:  libX11-devel
+BuildRequires:  libXrandr-devel
+BuildRequires:  libcairo-devel
+BuildRequires:  libpam-devel
+
+%description
+A simple, beautiful screen locker written in C.
+
+mel is a lightweight screen locker built around a simple idea: locking your screen should feel clean, quiet, and intentional. No unnecessary complexity, just a minimal interface that does its job.
+
+%prep
+%autosetup -n %{name}-%{commit}
+
+%build
+CFLAGS="%{optflags}" LDFLAGS="%{?__global_ldflags}" make PREFIX=%{_prefix}
+
+%install
+make install PREFIX=%{_prefix} DESTDIR=%{buildroot}
+
+%files
+%doc README.md
+%{_bindir}/mel
+%{_mandir}/man1/mel.1*
+%{_datadir}/mel/
