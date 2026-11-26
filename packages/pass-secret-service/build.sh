@@ -16,6 +16,8 @@ if [[ ! -f ${archive_output} ]]; then
 	curl -fL -o "$archive_output" "$repo_url/archive/v$version/$archive"
 fi
 
+cp -p *.patch "$sources_dir"/ 2>/dev/null || true
+
 {
 	echo "%global pass_secret_service_version $version"
 	echo

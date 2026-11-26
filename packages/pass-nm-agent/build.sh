@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+
+name=pass-nm-agent
+repo_url=https://github.com/grimsteel/${name}
+template=${name}.spec.template
+output=${name}.spec
+sources_dir=/usr/src/RPM/SOURCES
+
+url=$(curl -sIL -o /dev/null -w '%{url_effective}' "$repo_url/releases/latest")
+version=${url##*/v}
+
+archive=$name-$version.tar.gz
+archive_output=$sources_dir/$archive
+if [[ ! -f ${archive_output} ]]; then
+	curl -fL -o "$archive_output" "$repo_url/archive/v$version/$archive"
+fi
+
+cp -p *.patch "$sources_dir"/ 2>/dev/null || true
+
+{
+	echo "%global pass_nm_agent_version $version"
+	echo
+	cat "$template"
+} >"$output"

@@ -1,0 +1,24 @@
+diff -u a/src/network_manager.rs b/src/network_manager.rs
+--- a/src/network_manager.rs	2026-11-26 06:51:57.657421821 +0100
++++ b/src/network_manager.rs	2026-11-25 08:57:00.513286733 +0100
+@@ -160,7 +160,7 @@
+     }
+ 
+     // Update in NetworkManager
+-    make_proxy(conn, network.path)
++    let _: () = make_proxy(conn, network.path)
+         .method_call(
+             "org.freedesktop.NetworkManager.Settings.Connection",
+             "Update",
+diff -u a/src/service.rs b/src/service.rs
+--- a/src/service.rs	2026-11-26 06:51:57.657421821 +0100
++++ b/src/service.rs	2026-11-25 08:55:51.580375751 +0100
+@@ -193,7 +193,7 @@
+ pub async fn run_service(conn: Arc<SyncConnection>) -> Result<(), Box<dyn Error>> {
+     // First register our service
+     let nm_proxy = nonblock::Proxy::new("org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager/AgentManager", Duration::from_secs(2), conn.clone());
+-    nm_proxy.method_call("org.freedesktop.NetworkManager.AgentManager", "Register", ("grimsteel.pass-nm-agent",)).await?;
++    let _: () = nm_proxy.method_call("org.freedesktop.NetworkManager.AgentManager", "Register", ("grimsteel.pass-nm-agent",)).await?;
+     info!("Registered network manager agent");
+ 
+     //conn.request_name("com.grimsteel.passnmagent", false, true, false).await?;

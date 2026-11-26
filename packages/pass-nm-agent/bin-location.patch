@@ -1,0 +1,11 @@
+--- a/systemd/pass-nm-agent.service	2026-11-23 21:25:51.754372402 +0100
++++ b/systemd/pass-nm-agent.service	2026-11-26 06:55:24.778803725 +0100
+@@ -2,7 +2,7 @@
+ Description=NetworkManager secret agent for pass
+ 
+ [Service]
+-ExecStart=/usr/local/bin/pass-nm-agent agent
++ExecStart=/usr/bin/pass-nm-agent agent
+ Environment="RUST_LOG=info"
+ 
+ [Install]

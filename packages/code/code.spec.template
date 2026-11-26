@@ -722,5 +722,5 @@ fi
 
 # ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 %changelog
-* Sun Nov 22 2026 Packager <einar.hjortdal@outlook.com>
+* Sun Nov 22 2026 Einar Hjortdal <einar.hjortdal@outlook.com>
 - Install Code from the upstream RPM in %post
